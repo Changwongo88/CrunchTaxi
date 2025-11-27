@@ -17,6 +17,85 @@
             padding: 20px;
         }
         
+        /* 비밀번호 보호 오버레이 */
+        #passwordOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(5px);
+        }
+        #passwordBox {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            animation: fadeInScale 0.3s ease-out;
+        }
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        #passwordBox h2 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        #passwordBox p {
+            color: #6c757d;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        #passwordBox input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        #passwordBox input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+        #passwordBox button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #passwordBox button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+        }
+        #passwordError {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 10px;
+            font-weight: 500;
+        }
+        .content-hidden {
+            display: none !important;
+        }
+        
         .container { max-width: 1600px; margin: 0 auto; }
         
         h1 {
@@ -242,7 +321,18 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- 비밀번호 보호 오버레이 -->
+    <div id="passwordOverlay">
+        <div id="passwordBox">
+            <h2>🔒 개인정보 보호</h2>
+            <p>개인정보 보호를 위해 비밀번호를 입력해주세요</p>
+            <input type="password" id="passwordInput" placeholder="비밀번호를 입력하세요" autocomplete="off">
+            <div id="passwordError" style="display: none;">비밀번호가 올바르지 않습니다.</div>
+            <button onclick="checkPassword()">확인</button>
+        </div>
+    </div>
+    
+    <div class="container content-hidden" id="mainContent">
         <h1>🚕 호랑 스튜디오 야근택시비 지원 시뮬레이터</h1>
         <p class="subtitle">핵심 인력 이탈 방지를 위한 택시비 지원 정책 시뮬레이션 • 대상: 110명 (택시비 정보 보유)</p>
         
@@ -858,6 +948,47 @@
         });
         document.getElementById('teamTableBody').innerHTML = teamTableHtml;
     }
+    
+    // 비밀번호 확인 함수
+    const CORRECT_PASSWORD = 'Eodzb150!';
+    
+    function checkPassword() {
+        const input = document.getElementById('passwordInput');
+        const errorDiv = document.getElementById('passwordError');
+        const password = input.value;
+        
+        if (password === CORRECT_PASSWORD) {
+            // 비밀번호가 맞으면 오버레이 숨기고 콘텐츠 표시
+            document.getElementById('passwordOverlay').style.display = 'none';
+            document.getElementById('mainContent').classList.remove('content-hidden');
+            // 비밀번호 입력 필드 초기화
+            input.value = '';
+        } else {
+            // 비밀번호가 틀리면 에러 메시지 표시
+            errorDiv.style.display = 'block';
+            input.value = '';
+            input.focus();
+            // 입력 필드에 에러 스타일 적용
+            input.style.borderColor = '#dc3545';
+            setTimeout(() => {
+                input.style.borderColor = '#dee2e6';
+            }, 2000);
+        }
+    }
+    
+    // Enter 키로도 확인 가능하도록
+    document.addEventListener('DOMContentLoaded', function() {
+        const passwordInput = document.getElementById('passwordInput');
+        if (passwordInput) {
+            passwordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+            // 페이지 로드 시 비밀번호 입력 필드에 포커스
+            passwordInput.focus();
+        }
+    });
     
     init();
     </script>
