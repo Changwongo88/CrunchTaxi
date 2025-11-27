@@ -214,6 +214,7 @@
             background: #f8f9fa;
             border-radius: 8px;
             margin-bottom: 15px;
+            flex-wrap: wrap;
         }
         .batch-control label { font-weight: 500; color: #495057; }
         .batch-control input { width: 80px; padding: 8px; border: 1px solid #dee2e6; border-radius: 4px; text-align: center; }
@@ -226,8 +227,11 @@
             cursor: pointer;
             font-weight: 500;
             transition: all 0.3s;
+            white-space: nowrap;
         }
-        .batch-control button:hover { background: #5568d3; }
+        .batch-control button:hover { background: #5568d3; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(102,126,234,0.3); }
+        .batch-control button.reset-btn { background: #6c757d; }
+        .batch-control button.reset-btn:hover { background: #5a6268; box-shadow: 0 2px 8px rgba(108,117,125,0.3); }
         
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f8f9fa; border-radius: 4px; }
@@ -275,7 +279,7 @@
                 <div class="card" style="margin-top: 20px;">
                     <div class="card-title">📊 월간 예산 추정</div>
                     <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.85rem;">
-                        예산 = Σ(택시 이용일수 × 1회 택시비) × 신청률
+                        예산 = Σ[(야근일수 - 타교통) × 신청률 × 1회 택시비]
                     </p>
                     <div class="budget-cards">
                         <div class="budget-card">
@@ -291,7 +295,7 @@
                             <div class="value" id="statWithTaxi">-명</div>
                         </div>
                         <div class="stat-item">
-                            <div class="label">택시 이용일수</div>
+                            <div class="label">택시비 신청일수</div>
                             <div class="value" id="statTotalDays">-일</div>
                         </div>
                         <div class="stat-item">
@@ -354,12 +358,14 @@
                     
                     <div id="tabOvertime" class="tab-content">
                         <p style="color: #6c757d; margin-bottom: 10px; font-size: 0.85rem;">
-                            💡 <strong>택시 이용 일수</strong> = 야근일수 - 타교통 이용빈도 (대중교통, 카풀 등 이용 시 차감)
+                            💡 <strong>택시 이용일수</strong> = (야근일수 - 타교통 이용빈도) × 택시비 신청률<br>
+                            예: 야근 10일, 타교통 2일, 신청률 33% → 택시 이용 2.6일 (8일 × 0.33)
                         </p>
                         <div class="batch-control">
                             <label>일괄 적용:</label>
                             <input type="number" id="batchDays" min="0" max="20" value="10" placeholder="0-20">
                             <button onclick="applyBatchDays()">모든 인원에게 적용</button>
+                            <button class="reset-btn" onclick="resetToInitial()">초기값으로 돌리기</button>
                         </div>
                         
                         <div class="table-container">
@@ -374,7 +380,7 @@
                                         <th>1회 택시비</th>
                                         <th>야근일수</th>
                                         <th>타교통<br>이용빈도</th>
-                                        <th>택시이용<br>일수</th>
+                                        <th>택시비<br>신청일수</th>
                                         <th>월 예산</th>
                                     </tr>
                                 </thead>
@@ -629,6 +635,16 @@
         calculate();
     }
     
+    function resetToInitial() {
+        employees.forEach(e => {
+            e.overtimeDays = overtimePredictions[e.사번] || 10;
+            e.otherTransportDays = 0;
+        });
+        renderOvertimeTable();
+        calculate();
+        alert('모든 인원의 야근일수와 타교통 이용빈도를 초기값으로 되돌렸습니다.');
+    }
+    
     function updateOvertimeDays(empId, days) {
         const emp = employees.find(e => e.사번 === empId);
         if (emp) {
@@ -657,7 +673,8 @@
             const taxiFee = parseMoney(e['택시비구간']);
             const cappedFee = settings.applyCap ? Math.min(taxiFee, settings.cap) : taxiFee;
             const actualTaxiDays = Math.max(0, e.overtimeDays - (e.otherTransportDays || 0));
-            const monthlyBudget = actualTaxiDays * cappedFee * (settings.taxiUsageRate / 100);
+            const taxiRequestDays = actualTaxiDays * (settings.taxiUsageRate / 100);
+            const monthlyBudget = taxiRequestDays * cappedFee;
             const distance = parseInt(e['거리(km)']) || 0;
             
             html += `
@@ -684,7 +701,7 @@
                                max="${e.overtimeDays}"
                                onchange="updateOtherTransportDays('${e.사번}', parseInt(this.value))">
                     </td>
-                    <td style="font-weight:600; color:#667eea;">${actualTaxiDays}일</td>
+                    <td style="font-weight:600; color:#667eea;">${taxiRequestDays.toFixed(1)}일</td>
                     <td style="font-weight:600;">${formatMoney(Math.round(monthlyBudget))}</td>
                 </tr>
             `;
@@ -696,33 +713,30 @@
     function calculate() {
         const withTaxi = employees.filter(e => parseMoney(e['택시비구간']) > 0);
         
-        // 기본 통계
-        document.getElementById('statWithTaxi').textContent = withTaxi.length + '명';
-        
-        const totalDays = withTaxi.reduce((sum, e) => sum + (e.overtimeDays || 0), 0);
-        const totalTaxiDays = withTaxi.reduce((sum, e) => {
-            const actualDays = Math.max(0, (e.overtimeDays || 0) - (e.otherTransportDays || 0));
-            return sum + actualDays;
-        }, 0);
-        document.getElementById('statTotalDays').textContent = `${totalTaxiDays}일 (야근 ${totalDays}일)`;
-        
-        const overCap = withTaxi.filter(e => parseMoney(e['택시비구간']) > settings.cap).length;
-        document.getElementById('statOverCap').textContent = overCap + '명';
-        
-        // 예산 계산 (신청률 적용)
+        // 예산 계산 변수 먼저 선언
         let totalBudget = 0;
         let totalFull = 0;
+        let totalActualTaxiDays = 0;
+        let totalRequestDays = 0;
         
         withTaxi.forEach(e => {
             const taxiFee = parseMoney(e['택시비구간']);
             const actualDays = Math.max(0, (e.overtimeDays || 0) - (e.otherTransportDays || 0));
-            totalFull += taxiFee * actualDays;
-            totalBudget += (settings.applyCap ? Math.min(taxiFee, settings.cap) : taxiFee) * actualDays;
+            const requestDays = actualDays * (settings.taxiUsageRate / 100);
+            
+            totalActualTaxiDays += actualDays;
+            totalRequestDays += requestDays;
+            
+            totalFull += taxiFee * requestDays;
+            totalBudget += (settings.applyCap ? Math.min(taxiFee, settings.cap) : taxiFee) * requestDays;
         });
         
-        // 신청률 적용
-        totalBudget = totalBudget * (settings.taxiUsageRate / 100);
-        totalFull = totalFull * (settings.taxiUsageRate / 100);
+        // 기본 통계
+        document.getElementById('statWithTaxi').textContent = withTaxi.length + '명';
+        document.getElementById('statTotalDays').textContent = `${totalRequestDays.toFixed(1)}일 (이용가능 ${totalActualTaxiDays}일)`;
+        
+        const overCap = withTaxi.filter(e => parseMoney(e['택시비구간']) > settings.cap).length;
+        document.getElementById('statOverCap').textContent = overCap + '명';
         
         document.getElementById('budgetTotal').textContent = formatMoney(Math.round(totalBudget));
         document.getElementById('budgetSub').textContent = `신청률 ${settings.taxiUsageRate}% 적용`;
@@ -804,7 +818,8 @@
             tierAnalysis[tier].potential.forEach(e => {
                 const loss = parseMoney(e['택시비구간']) - settings.cap;
                 const actualDays = Math.max(0, (e.overtimeDays || 0) - (e.otherTransportDays || 0));
-                const monthlyLoss = loss * actualDays * (settings.taxiUsageRate / 100);
+                const requestDays = actualDays * (settings.taxiUsageRate / 100);
+                const monthlyLoss = loss * requestDays;
                 objectorsList += `
                     <div class="member-item">
                         <div>
